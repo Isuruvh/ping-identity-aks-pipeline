@@ -21,7 +21,7 @@ stages:
     - task: AzureCLI@2
       displayName: '1. Create Resource Group & AKS Cluster'
       inputs:
-        azureSubscription: 'Your-Azure-Service-Connection' # Matches your service connection name
+        azureSubscription: 'My-Azure-Service-Connection' # Aligned perfectly with your connection name
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -47,7 +47,7 @@ stages:
     - task: AzureCLI@2
       displayName: '3. Create K8s License Secret & Deploy Stack'
       inputs:
-        azureSubscription: 'Your-Azure-Service-Connection'
+        azureSubscription: 'My-Azure-Service-Connection' # Aligned perfectly with your connection name
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -93,7 +93,7 @@ stages:
     - task: AzureCLI@2
       displayName: 'Purge Sandbox Resources'
       inputs:
-        azureSubscription: 'Your-Azure-Service-Connection'
+        azureSubscription: 'My-Azure-Service-Connection' # Aligned perfectly with your connection name
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
