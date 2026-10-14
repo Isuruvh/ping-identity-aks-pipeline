@@ -1,0 +1,100 @@
+trigger: none # Manual trigger only to guarantee zero accidental costs
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: ping-devops-secrets # Hooks into your secure Library variable vault
+- name: resourceGroup
+  value: 'rg-ping-sandbox-sydney'
+- name: location
+  value: 'australiaeast'
+- name: clusterName
+  value: 'aks-ping-fullstack'
+
+stages:
+- stage: ProvisionAndDeploy
+  displayName: 'Stand up Infrastructure and Ping Stack'
+  jobs:
+  - job: Deploy
+    steps:
+    - task: AzureCLI@2
+      displayName: '1. Create Resource Group & AKS Cluster'
+      inputs:
+        azureSubscription: 'Your-Azure-Service-Connection' # Matches your service connection name
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az group create --name $(resourceGroup) --location $(location)
+          
+          # Deploy a cheap, single-node cluster to prevent heavy billing
+          az aks create \
+            --resource-group $(resourceGroup) \
+            --name $(clusterName) \
+            --node-count 1 \
+            --node-vm-size Standard_D4s_v5 \
+            --generate-ssh-keys
+            
+          az aks get-credentials --resource-group $(resourceGroup) --name $(clusterName)
+
+    - script: |
+        echo "2. Installing Helm and adding Ping Identity repository"
+        curl https://githubusercontent.com | bash
+        helm repo add pingidentity https://pingidentity.com
+        helm repo update
+      displayName: 'Install Deployment Tools'
+
+    - task: AzureCLI@2
+      displayName: '3. Create K8s License Secret & Deploy Stack'
+      inputs:
+        azureSubscription: 'Your-Azure-Service-Connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group $(resourceGroup) --name $(clusterName)
+          
+          kubectl create namespace ping-services || true
+          
+          # Dynamically inject your secured variables into the live AKS cluster
+          kubectl create secret generic ping-devops-secret \
+            --namespace ping-services \
+            --from-literal=PING_IDENTITY_DEVOPS_USER=$(PING_IDENTITY_DEVOPS_USER) \
+            --from-literal=PING_IDENTITY_DEVOPS_KEY=$(PING_IDENTITY_DEVOPS_KEY) \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Deploy the containerized directory services instantly
+          helm upgrade --install ping-stack pingidentity/ping-devops \
+            --namespace ping-services \
+            --set global.envs.PING_IDENTITY_DEVOPS_USER=$(PING_IDENTITY_DEVOPS_USER) \
+            --set global.envs.PING_IDENTITY_DEVOPS_KEY=$(PING_IDENTITY_DEVOPS_KEY)
+            
+          echo "Deployment successfully initiated."
+
+- stage: HoldForTesting
+  displayName: 'Manual Testing Gate'
+  dependsOn: ProvisionAndDeploy
+  jobs:
+  - job: WaitForHumanValidation
+    pool: server # Runs serverless so you don't pay build agent runtime costs while testing
+    steps:
+    - task: ManualValidation@0
+      inputs:
+        notifyUsers: 'isuruheendeniya@://onmicrosoft.com'
+        instructions: 'The full stack is operational in AKS. Conduct your validation scenarios via your endpoints, then click Resume to dismantle.'
+        onTimeout: 'reject'
+
+- stage: TeardownAndDestroy
+  displayName: 'Dismantle Infrastructure'
+  dependsOn: HoldForTesting
+  condition: always() # Guarantees resources are destroyed even if earlier steps time out or fail
+  jobs:
+  - job: DestroyAzureResources
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Purge Sandbox Resources'
+      inputs:
+        azureSubscription: 'Your-Azure-Service-Connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az group delete --name $(resourceGroup) --yes --no-wait
