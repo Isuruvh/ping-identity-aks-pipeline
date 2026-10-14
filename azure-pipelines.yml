@@ -21,18 +21,18 @@ stages:
     - task: AzureCLI@2
       displayName: '1. Create Resource Group & AKS Cluster'
       inputs:
-        azureSubscription: 'My-Azure-Service-Connection' # Aligned perfectly with your connection name
+        azureSubscription: 'My-Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
           az group create --name $(resourceGroup) --location $(location)
           
-          # Deploy a cheap, single-node cluster to prevent heavy billing
+          # Swapped to Standard_B4ms to bypass Australia East D-series capacity blocks
           az aks create \
             --resource-group $(resourceGroup) \
             --name $(clusterName) \
             --node-count 1 \
-            --node-vm-size Standard_D4s_v5 \
+            --node-vm-size Standard_B4ms \
             --generate-ssh-keys
             
           az aks get-credentials --resource-group $(resourceGroup) --name $(clusterName)
@@ -47,7 +47,7 @@ stages:
     - task: AzureCLI@2
       displayName: '3. Create K8s License Secret & Deploy Stack'
       inputs:
-        azureSubscription: 'My-Azure-Service-Connection' # Aligned perfectly with your connection name
+        azureSubscription: 'My-Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -93,7 +93,7 @@ stages:
     - task: AzureCLI@2
       displayName: 'Purge Sandbox Resources'
       inputs:
-        azureSubscription: 'My-Azure-Service-Connection' # Aligned perfectly with your connection name
+        azureSubscription: 'My-Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
